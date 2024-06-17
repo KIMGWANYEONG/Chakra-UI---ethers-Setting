@@ -3,6 +3,7 @@ import { Contract, ethers } from "ethers";
 import { JsonRpcSigner } from "ethers";
 import { ChangeEvent, FC, useEffect, useState } from "react";
 import mintNftAbi from "./mintNftAbi.json";
+import axios from "axios";
 
 const App: FC = () => {
   const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
@@ -20,13 +21,74 @@ const App: FC = () => {
     }
   };
 
+  const uploadImage = async (formData: FormData) => {
+    try {
+      const response = await axios.post(
+        "https://api.pinata.cloud/pinning/pinFileToIPFS",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            pinata_api_key: import.meta.env.VITE_PINATA_KEY,
+            pinata_secret_api_key: import.meta.env.VITE_PINATA_SECRET,
+          },
+        }
+      );
+
+      return `https://slime-project.mypinata.cloud/ipfs/${response.data.IpfsHash}`;
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const uploadMetadata = async (image: string) => {
+    try {
+      const metadata = JSON.stringify({
+        pinataContent: {
+          name: "Test",
+          description: "Test",
+          image,
+        },
+        pinataMetadata: {
+          name: "test.json",
+        },
+      });
+
+      const response = await axios.post(
+        "https://api.pinata.cloud/pinning/pinJSONToIPFS",
+        metadata,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            pinata_api_key: import.meta.env.VITE_PINATA_KEY,
+            pinata_secret_api_key: import.meta.env.VITE_PINATA_SECRET,
+          },
+        }
+      );
+
+      return `https://slime-project.mypinata.cloud/ipfs/${response.data.IpfsHash}`;
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const onChangeFile = async (e: ChangeEvent<HTMLInputElement>) => {
     try {
-      if (!e.currentTarget.files) return;
+      if (!e.currentTarget.files || !contract) return;
 
       const formData = new FormData();
 
       formData.append("file", e.currentTarget.files[0]);
+
+      const imageUrl = await uploadImage(formData);
+
+      const metadataUrl = await uploadMetadata(imageUrl!);
+
+      const tx = await contract.mintNft(metadataUrl);
+
+      await tx.wait();
+
+      console.log(tx);
     } catch (error) {
       console.error(error);
     }
@@ -56,7 +118,15 @@ const App: FC = () => {
       {signer ? (
         <>
           <Text>{signer.address}</Text>
-          <input type="file" onChange={onChangeFile} />
+          <input
+            style={{ display: "none" }}
+            id="file"
+            type="file"
+            onChange={onChangeFile}
+          />
+          <label htmlFor="file">
+            <Text>민팅</Text>
+          </label>
         </>
       ) : (
         <Button onClick={onClickMetamask}>🦊 로그인</Button>

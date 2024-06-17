@@ -1,3 +1,3 @@
-interface window {
+interface Window {
   ethereum: any;
 }
